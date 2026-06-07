@@ -1,0 +1,77 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+# 关键：设置 Pages 权限
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 防止并发部署冲突
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  # ============= CI + CD 合并为一个任务 =============
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 检出代码
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # 步骤1：代码检查 —— 确认 index.html 存在
+      - name: Check file existence
+        run: |
+          echo "🔍 检查项目文件..."
+          if [ -f "index.html" ]; then
+            echo "✅ index.html 存在"
+          else
+            echo "❌ index.html 不存在"
+            exit 1
+          fi
+
+      # 步骤2：HTML 结构验证
+      - name: Validate HTML structure
+        run: |
+          echo "🔍 验证 HTML 结构..."
+          if grep -q "<!DOCTYPE html>" "index.html"; then
+            echo "✅ DOCTYPE 声明正确"
+          else
+            echo "❌ 缺少 DOCTYPE 声明"
+            exit 1
+          fi
+          if grep -q "</html>" "index.html"; then
+            echo "✅ HTML 标签闭合正确"
+          else
+            echo "❌ HTML 标签未闭合"
+            exit 1
+          fi
+          echo "🎉 所有检查通过！"
+
+      # 步骤3：构建产物 —— 生成部署包
+      - name: Build artifact
+        run: |
+          echo "📦 生成部署包..."
+          mkdir -p _site
+          cp index.html _site/
+          echo "✅ 部署包已生成"
+
+      # 步骤4：打包上传（准备部署）
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      # 步骤5：部署到 GitHub Pages（仅 main 分支推送时执行）
+      - name: Deploy to GitHub Pages
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        id: deployment
+        uses: actions/deploy-pages@v4
